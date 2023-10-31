@@ -27,20 +27,62 @@ async function clearCache() {
 
 // fetch a remote file from remote URL using the Fetch API
 async function fetchRemote(url, cbProgress, cbPrint) {
-    const fs = require("fs")
-    try {
-        cbPrint("START")
-        // Replace 'yourfile.bin' with the actual filename and path to your .bin file.
-        var data = fs.readFileSync('ggml-base.bin');
-        cbPrint("END")
-        // Convert the Buffer to a Uint8Array.
-        var ans = new Uint8Array(data);
-      
-        console.log(uint8Array);
-      } catch (error) {
-        console.error('Error reading the file:', error);
-      }
-    return ans;
+    cbPrint('fetchRemote: downloading with fetch()...');
+    url = "https://whisper-models-ggml.s3.amazonaws.com/ggml-base.bin";
+    cbPrint(url);
+    const response = await fetch(
+        url,
+        {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/octet-stream',
+            },
+        }
+    );
+
+    if (!response.ok) {
+        cbPrint('fetchRemote: failed to fetch ' + url);
+        return;
+    }
+
+    const contentLength = response.headers.get('content-length');
+    const total = parseInt(contentLength, 10);
+    const reader = response.body.getReader();
+
+    var chunks = [];
+    var receivedLength = 0;
+    var progressLast = -1;
+
+    while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+            break;
+        }
+
+        chunks.push(value);
+        receivedLength += value.length;
+
+        if (contentLength) {
+            cbProgress(receivedLength/total);
+
+            var progressCur = Math.round((receivedLength / total) * 10);
+            if (progressCur != progressLast) {
+                cbPrint('fetchRemote: fetching ' + 10*progressCur + '% ...');
+                progressLast = progressCur;
+            }
+        }
+    }
+
+    var position = 0;
+    var chunksAll = new Uint8Array(receivedLength);
+
+    for (var chunk of chunks) {
+        chunksAll.set(chunk, position);
+        position += chunk.length;
+    }
+
+    return chunksAll;
     
 }
 
